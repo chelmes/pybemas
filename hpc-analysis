@@ -1,10 +1,54 @@
 #!/bin/python
 
 import argparse as ap
+import glob
+from itertools import islice
 import numpy as np
+import re
+
+def re_int_nested(string,re1,re2):
+	_match = re1.search(string).group()
+	_submatch = re2.search(_match).group()
+	return _submatch
 
 def main():
 	# Read in the arguments from every file in regular expression
+	parser = ap.ArgumentParser()
+	parser.add_argument("source", help="Source directory where to search for output files")
+	parser.add_argument("files", help="regular expression matching files for analysis")
+	parser.add_argument("outfile", help="filename for table")
+	parser.add_argument("keys", nargs='+',help="keywords to search for file")
+	args=parser.parse_args()
+	# list of filenames matching regular expression
+	print(args.source+'/'+args.files)
+	flist=glob.glob(args.source+'/'+args.files)
+	# compile a decimal floating point regex
+	re_int = re.compile('[0-9]+')
+	re_dec = re.compile('[0-9]+\.[0-9]+')
+	re_mpi = re.compile('mpi[0-9]+') 
+	re_omp = re.compile('omp[0-9]+')
+	# init empty arrays
+	_mpi=np.zeros((len(flist)))
+	_omp=np.zeros_like(_mpi)
+	_setup=np.zeros_like(_mpi)
+	_walltime=np.zeros_like(_mpi)
+	for i,fname in enumerate(flist):
+		_mpi[i]=float(re_int_nested(fname,re_mpi,re_int))
+		_omp[i]=float(re_int_nested(fname,re_omp,re_int))
+		with open(fname) as f:
+			for line in f:
+				for k in args.keys:
+					if k in line:
+						if k == "setup steps":
+							res=''.join(islice(f,1))
+							# Interested in first number
+							_setup[i]=float(re_dec.findall(res)[0])
+						if k == "wall clock time":
+							_walltime[i]=float(re_dec.search(line).group())
+	# Stack data to a table
+	header = "MPI-procs	OMP-Threads	Setup-time[s]	Wall-solve[s]"
+	tab = np.vstack((_mpi,_omp,_setup,_walltime)).T
+	np.savetxt(args.outfile,tab,fmt='%.2f',header=header)	
 	# create a dictionary of the necessary values
 	# generate an output table
 	# plot results 
@@ -13,5 +57,5 @@ if __name__ == '__main__':
 	try:
 		print("starting")
 		main()
-	except KeybordInterrupt:
+	except KeyboardInterrupt:
 		pass

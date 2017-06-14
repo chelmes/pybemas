@@ -3,15 +3,39 @@
 import argparse as ap
 import glob
 from itertools import islice
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import re
 
 def re_int_nested(string,re1,re2):
 	_match = re1.search(string).group()
 	_submatch = re2.search(_match).group()
-	return _submatch
+	return float(_submatch)
 
-def main():
+
+def re_find_all(string,re,entry):
+	return float(re.findall(string)[entry])
+
+def re_search(string,re):                           
+	return float(re.search(string).group())
+
+def plot_hpc(plotfile,label, data_dict):
+	pdf = PdfPages(plotfile)
+	# set data
+	s = np.sqrt(data_dict["procs"]*data_dict["threads"])
+	colors = data_dict["threads"]
+	x = data_dict[label[1]]
+	y = data_dict[label[2]]
+	plt.scatter(x,y,area=s,colors=colors,alpha=0.5)
+	# set layout
+	plt.title(label[0])
+	plt.xlabel(label[1])
+	plt.ylabel(label[2])
+	pdf.savefig()
+	pdf.close()
+
+def main():                
 	# Read in the arguments from every file in regular expression
 	parser = ap.ArgumentParser()
 	parser.add_argument("source", help="Source directory where to search for output files")
@@ -19,6 +43,7 @@ def main():
 	parser.add_argument("outfile", help="filename for table")
 	parser.add_argument("keys", nargs='+',help="keywords to search for file")
 	args=parser.parse_args()
+
 	# list of filenames matching regular expression
 	print(args.source+'/'+args.files)
 	flist=glob.glob(args.source+'/'+args.files)
@@ -28,13 +53,14 @@ def main():
 	re_mpi = re.compile('mpi[0-9]+') 
 	re_omp = re.compile('omp[0-9]+')
 	# init empty arrays
-	_mpi=np.zeros((len(flist)))
-	_omp=np.zeros_like(_mpi)
-	_setup=np.zeros_like(_mpi)
-	_walltime=np.zeros_like(_mpi)
+	_mpi = np.zeros((len(flist)))
+	_omp = np.zeros_like(_mpi)
+	_setup = np.zeros_like(_mpi)
+	_walltime = np.zeros_like(_mpi)
+	# this is where the read in happens
 	for i,fname in enumerate(flist):
-		_mpi[i]=float(re_int_nested(fname,re_mpi,re_int))
-		_omp[i]=float(re_int_nested(fname,re_omp,re_int))
+		_mpi[i] = re_int_nested(fname,re_mpi,re_int)
+		_omp[i] = re_int_nested(fname,re_omp,re_int)
 		with open(fname) as f:
 			for line in f:
 				for k in args.keys:
@@ -42,16 +68,19 @@ def main():
 						if k == "setup steps":
 							res=''.join(islice(f,1))
 							# Interested in first number
-							_setup[i]=float(re_dec.findall(res)[0])
+							_setup[i] = re_find_all(res, re_dec, 0)
 						if k == "wall clock time":
-							_walltime[i]=float(re_dec.search(line).group())
-	# Stack data to a table
+							_walltime[i] = re_search(line, re_dec)
+	# generate an output table
 	header = "MPI-procs	OMP-Threads	Setup-time[s]	Wall-solve[s]"
 	tab = np.vstack((_mpi,_omp,_setup,_walltime)).T
-	np.savetxt(args.outfile,tab,fmt='%.2f',header=header)	
-	# create a dictionary of the necessary values
-	# generate an output table
-	# plot results 
+	np.savetxt(args.outfile,tab,fmt='%.2f',header=header)
+	# generate dictionaries for every variable, easier to handle in plot
+	# plot results
+	data_dict = {"procs": _mpi, "threads": _omp, "setup":_setup, "wall-solve":_walltime}
+	print data_dict["setup"]
+	label["performance", "threads", "setup"]
+	plot_hpc('perf.pdf',label,data_dict)
 
 if __name__ == '__main__':
 	try:

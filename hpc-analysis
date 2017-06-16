@@ -20,20 +20,30 @@ def re_find_all(string,re,entry):
 def re_search(string,re):                           
     return float(re.search(string).group())
 
-def plot_hpc(plotfile,label, data_dict):
+def plot_hpc(plotfile,label, data_dict, mpi_procs=None):
     pdf = PdfPages(plotfile)
     # set data
     area = np.pi*np.sqrt(data_dict["procs"]*data_dict["threads"])**2
-    colors = data_dict["threads"]
+    colors = data_dict["procs"]
+    # filter according to mpi processes
     x = data_dict[label[1]]
     y = data_dict[label[2]]
-    print("plotting (x,y)")
-    print(x,y)
-    plt.scatter(x,y,s=area)
+    if mpi_procs is None:
+            plt.scatter(x,y,s=area,alpha=0.5)
+    else:
+        color=['b','r']
+        for i,d in enumerate(mpi_procs):
+            tmp = data_dict["procs"] == d
+            print(i,d,data_dict["procs"])
+            _x = data_dict[label[1]][tmp]
+            _y = data_dict[label[2]][tmp]
+            area = np.pi*np.sqrt(data_dict["procs"][tmp]*data_dict["threads"][tmp])**2
+            plt.scatter(_x,_y,s=area,c=color[i], label="%d MPI-proc." %int(d),alpha=0.5)
     # set layout
     plt.title(label[0])
     plt.xlabel(label[1])
     plt.ylabel(label[2]+' [s]')
+    plt.legend(loc=7,markerscale=0.5)
     pdf.savefig()
     pdf.close()
     plt.clf()
@@ -62,9 +72,10 @@ def main():
     _walltime = np.zeros_like(_mpi)
     # this is where the read in happens
     for i,fname in enumerate(flist):
-    	_mpi[i] = re_int_nested(fname,re_mpi,re_int)
-    	_omp[i] = re_int_nested(fname,re_omp,re_int)
-    	with open(fname) as f:
+        _mpi[i] = re_int_nested(fname,re_mpi,re_int)
+        print("found %f mpi" %_mpi[i])
+        _omp[i] = re_int_nested(fname,re_omp,re_int)
+        with open(fname) as f:
             for line in f:
                 for k in args.keys:
                     if k in line:
@@ -82,10 +93,10 @@ def main():
     # plot results
     data_dict = {"procs": _mpi, "threads": _omp, "setup":_setup, "wall-solve":_walltime}
     print(data_dict)
-    label = ["1 node, 16 mpi", "threads", "wall-solve"]
-    plot_hpc('wall_solve.pdf',label,data_dict)
-    label = ["1 node, 16 mpi", "threads", "setup"]
-    plot_hpc('setup-time.pdf',label,data_dict)
+    label = ["1 node", "threads", "wall-solve"]
+    plot_hpc('wall_solve.pdf',label,data_dict,mpi_procs=[16.,32.])
+    label = ["1 node", "threads", "setup"]
+    plot_hpc('setup-time.pdf',label,data_dict,mpi_procs=[16.,32.])
 
 if __name__ == '__main__':
 	try:
